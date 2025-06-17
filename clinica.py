@@ -1,341 +1,367 @@
-import unittest
 from datetime import datetime
-from typing import List, Dict
+from typing import List
 
-# =======================
+
 # Excepciones personalizadas
-# =======================
-class PacienteYaExisteError(Exception): pass
-class MedicoYaExisteError(Exception): pass
-class PacienteNoExisteError(Exception): pass
-class MedicoNoExisteError(Exception): pass
-class TurnoDuplicadoError(Exception): pass
-class RecetaInvalidaError(Exception): pass
-class EspecialidadInvalidaError(Exception): pass
+class PacienteYaRegistradoException(Exception):
+    pass
 
-# =======================
-# Clases principales
-# =======================
+
+class MedicoYaRegistradoException(Exception):
+    pass
+
+
+class PacienteNoEncontradoException(Exception):
+    pass
+
+
+class MedicoNoEncontradoException(Exception):
+    pass
+
+
+class EspecialidadDuplicadaException(Exception):
+    pass
+
+
+class EspecialidadInvalidaException(Exception):
+    pass
+
+
+class TurnoOcupadoException(Exception):
+    pass
+
+
+class TurnoInvalidoException(Exception):
+    pass
+
+
+class RecetaInvalidaException(Exception):
+    pass
+
+
+# Clases base
+
 class Paciente:
-    def __init__(self, dni: str, nombre: str, fecha_nacimiento: str):
-        self.dni = dni
-        self.nombre = nombre
-        self.fecha_nacimiento = fecha_nacimiento
+    def __init__(self, nombre: str, apellido: str, dni: str, edad: int):
+        if not nombre or not apellido or not dni:
+            raise ValueError("Nombre, apellido y dni no pueden estar vacíos")
+        self._nombre = nombre
+        self._apellido = apellido
+        self._dni = dni
+        self._edad = edad
 
-    def __str__(self):
-        return f"{self.nombre} (DNI: {self.dni}, Nac.: {self.fecha_nacimiento})"
+    @property
+    def nombre(self):
+        return self._nombre
+
+    @property
+    def apellido(self):
+        return self._apellido
+
+    @property
+    def dni(self):
+        return self._dni
+
+    @property
+    def edad(self):
+        return self._edad
+
 
 class Especialidad:
-    def __init__(self, tipo: str, dias_disponibles: List[str]):
-        self.tipo = tipo
-        self.dias_disponibles = dias_disponibles
+    def __init__(self, nombre: str, dias_atencion: List[int]):
+        if not nombre:
+            raise EspecialidadInvalidaException("El nombre de especialidad no puede estar vacío")
+        if not all(isinstance(d, int) and 0 <= d <= 6 for d in dias_atencion):
+            raise EspecialidadInvalidaException("Los días de atención deben ser enteros entre 0 y 6")
+        self._nombre = nombre
+        self._dias_atencion = dias_atencion
 
-    def agregar_dia(self, dia: str):
-        if dia.lower() not in [d.lower() for d in self.dias_disponibles]:
-            self.dias_disponibles.append(dia)
+    @property
+    def nombre(self):
+        return self._nombre
 
-    def esta_disponible(self, dia: str) -> bool:
-        return any(d.lower() == dia.lower() for d in self.dias_disponibles)
+    @property
+    def dias_atencion(self):
+        return self._dias_atencion
 
-    def __str__(self):
-        dias_str = ", ".join(self.dias_disponibles) if self.dias_disponibles else "Sin días disponibles"
-        return f"{self.tipo} (Días: {dias_str})"
+    def __eq__(self, other):
+        if not isinstance(other, Especialidad):
+            return False
+        return self.nombre == other.nombre
+
+    def __hash__(self):
+        return hash(self.nombre)
+
 
 class Medico:
-    def __init__(self, matricula: str, nombre: str, especialidades: List[Especialidad]):
-        self.matricula = matricula
-        self.nombre = nombre
-        self.especialidades = especialidades
+    def __init__(self, nombre: str, apellido: str, matricula: str, especialidades: List[Especialidad]):
+        if not nombre or not apellido or not matricula:
+            raise ValueError("Nombre, apellido y matrícula no pueden estar vacíos")
+        self._nombre = nombre
+        self._apellido = apellido
+        self._matricula = matricula
+        self._especialidades = list(especialidades) if especialidades else []
+
+    @property
+    def nombre(self):
+        return self._nombre
+
+    @property
+    def apellido(self):
+        return self._apellido
+
+    @property
+    def matricula(self):
+        return self._matricula
+
+    @property
+    def especialidades(self):
+        return self._especialidades
 
     def agregar_especialidad(self, especialidad: Especialidad):
-        self.especialidades.append(especialidad)
+        if especialidad in self._especialidades:
+            raise EspecialidadDuplicadaException(f"Especialidad '{especialidad.nombre}' ya existe para este médico")
+        self._especialidades.append(especialidad)
 
-    def obtener_especialidad_para_dia(self, dia: str):
-        for e in self.especialidades:
-            if e.esta_disponible(dia):
-                return e
-        return None
-
-    def __str__(self):
-        especialidades_str = "; ".join(str(e) for e in self.especialidades)
-        return f"Dr. {self.nombre} (Matrícula: {self.matricula}) - Especialidades: {especialidades_str}"
 
 class Turno:
-    def __init__(self, paciente: Paciente, medico: Medico, fecha: str, hora: str):
-        self.paciente = paciente
-        self.medico = medico
-        self.fecha = fecha
-        self.hora = hora
+    def __init__(self, paciente: Paciente, medico: Medico, fecha: datetime, especialidad: Especialidad):
+        self._paciente = paciente
+        self._medico = medico
+        self._fecha = fecha
+        self._especialidad = especialidad
 
-    def __str__(self):
-        return f"Turno: {self.fecha} {self.hora} - {self.paciente.nombre} con {self.medico.nombre}"
+    @property
+    def paciente(self):
+        return self._paciente
+
+    @property
+    def medico(self):
+        return self._medico
+
+    @property
+    def fecha(self):
+        return self._fecha
+
+    @property
+    def especialidad(self):
+        return self._especialidad
+
+    def __eq__(self, other):
+        if not isinstance(other, Turno):
+            return False
+        return (
+            self.paciente.dni == other.paciente.dni and
+            self.medico.matricula == other.medico.matricula and
+            self.fecha == other.fecha and
+            self.especialidad.nombre == other.especialidad.nombre
+        )
+
+    def __hash__(self):
+        return hash((self.paciente.dni, self.medico.matricula, self.fecha, self.especialidad.nombre))
+
 
 class Receta:
-    def __init__(self, paciente: Paciente, medico: Medico, medicamento: str, fecha: str):
-        self.paciente = paciente
-        self.medico = medico
-        self.medicamento = medicamento
-        self.fecha = fecha
+    def __init__(self, paciente: Paciente, medico: Medico, medicamentos: List[str]):
+        if not medicamentos or not isinstance(medicamentos, list) or len(medicamentos) == 0:
+            raise RecetaInvalidaException("La receta debe contener al menos un medicamento")
+        self._paciente = paciente
+        self._medico = medico
+        self._medicamentos = medicamentos
 
-    def __str__(self):
-        return f"{self.fecha}: {self.medicamento} recetado por {self.medico.nombre} a {self.paciente.nombre}"
+    @property
+    def paciente(self):
+        return self._paciente
 
-class HistoriaClinica:
-    def __init__(self, paciente: Paciente):
-        self.paciente = paciente
-        self.recetas: List[Receta] = []
+    @property
+    def medico(self):
+        return self._medico
 
-    def agregar_receta(self, receta: Receta):
-        self.recetas.append(receta)
+    @property
+    def medicamentos(self):
+        return self._medicamentos
 
-    def __str__(self):
-        if not self.recetas:
-            return f"Historia clínica de {self.paciente.nombre}: Sin recetas"
-        recetas_str = "\n".join(str(r) for r in self.recetas)
-        return f"Historia clínica de {self.paciente.nombre}:\n{recetas_str}"
+    def __eq__(self, other):
+        if not isinstance(other, Receta):
+            return False
+        return (
+            self.paciente.dni == other.paciente.dni and
+            self.medico.matricula == other.medico.matricula and
+            self.medicamentos == other.medicamentos
+        )
+
+    def __hash__(self):
+        return hash((self.paciente.dni, self.medico.matricula, tuple(self.medicamentos)))
+
 
 class Clinica:
     def __init__(self):
-        self.pacientes: Dict[str, Paciente] = {}
-        self.medicos: Dict[str, Medico] = {}
-        self.turnos: List[Turno] = []
-        self.historias: Dict[str, HistoriaClinica] = {}
+        self.pacientes = {}  # dni -> Paciente
+        self.medicos = {}    # matricula -> Medico
+        self._turnos = []    # lista de Turnos
+        self._recetas = []   # lista de Recetas
 
-    def registrar_paciente(self, paciente: Paciente):
+    def agregar_paciente(self, paciente: Paciente):
         if paciente.dni in self.pacientes:
-            raise PacienteYaExisteError("Paciente ya registrado")
+            raise PacienteYaRegistradoException(f"Paciente con DNI {paciente.dni} ya registrado")
         self.pacientes[paciente.dni] = paciente
-        self.historias[paciente.dni] = HistoriaClinica(paciente)
 
-    def registrar_medico(self, medico: Medico):
+    def agregar_medico(self, medico: Medico):
         if medico.matricula in self.medicos:
-            raise MedicoYaExisteError("Médico ya registrado")
+            raise MedicoYaRegistradoException(f"Médico con matrícula {medico.matricula} ya registrado")
         self.medicos[medico.matricula] = medico
 
-    def agendar_turno(self, dni: str, matricula: str, fecha: str, hora: str) -> Turno:
-        if dni not in self.pacientes:
-            raise PacienteNoExisteError("Paciente no encontrado")
-        if matricula not in self.medicos:
-            raise MedicoNoExisteError("Médico no encontrado")
+    def agregar_especialidad_a_medico(self, matricula_medico: str, especialidad: Especialidad):
+        if matricula_medico not in self.medicos:
+            raise MedicoNoEncontradoException(f"Médico con matrícula {matricula_medico} no encontrado")
+        medico = self.medicos[matricula_medico]
+        medico.agregar_especialidad(especialidad)
 
-        paciente = self.pacientes[dni]
-        medico = self.medicos[matricula]
-        nuevo_turno = Turno(paciente, medico, fecha, hora)
+    def agendar_turno(self, dni_paciente: str, matricula_medico: str, fecha: datetime, nombre_especialidad: str) -> Turno:
+        # Validaciones iniciales
+        if dni_paciente not in self.pacientes:
+            raise PacienteNoEncontradoException(f"Paciente con DNI {dni_paciente} no encontrado")
+        if matricula_medico not in self.medicos:
+            raise MedicoNoEncontradoException(f"Médico con matrícula {matricula_medico} no encontrado")
 
-        for t in self.turnos:
-            if t.medico.matricula == matricula and t.fecha == fecha and t.hora == hora:
-                raise TurnoDuplicadoError("El médico ya tiene un turno en ese horario")
+        paciente = self.pacientes[dni_paciente]
+        medico = self.medicos[matricula_medico]
 
-        self.turnos.append(nuevo_turno)
-        return nuevo_turno
+        # Verifico que el médico tenga esa especialidad
+        especialidad = None
+        for esp in medico.especialidades:
+            if esp.nombre == nombre_especialidad:
+                especialidad = esp
+                break
 
-    def recetar_medicamento(self, dni: str, matricula: str, medicamento: str, fecha: str) -> Receta:
-        if dni not in self.pacientes:
-            raise PacienteNoExisteError("Paciente no encontrado")
-        if matricula not in self.medicos:
-            raise MedicoNoExisteError("Médico no encontrado")
-        if not medicamento:
-            raise RecetaInvalidaError("El medicamento no puede estar vacío")
+        if especialidad is None:
+            raise TurnoInvalidoException(f"Médico no atiende la especialidad {nombre_especialidad}")
 
-        receta = Receta(self.pacientes[dni], self.medicos[matricula], medicamento, fecha)
-        self.historias[dni].agregar_receta(receta)
+        # Verifico que la fecha sea un día que el médico atiende
+        if fecha.weekday() not in especialidad.dias_atencion:
+            raise TurnoInvalidoException(f"El médico no trabaja ese día ({fecha.strftime('%A')})")
+
+        # Verifico que el turno no esté ocupado (para el mismo médico y fecha)
+        for turno_existente in self._turnos:
+            if (turno_existente.medico.matricula == matricula_medico and
+                    turno_existente.fecha == fecha):
+                raise TurnoOcupadoException("El turno está ocupado para ese médico y fecha")
+
+        turno = Turno(paciente, medico, fecha, especialidad)
+        self._turnos.append(turno)
+        return turno
+
+    def emitir_receta(self, dni_paciente: str, matricula_medico: str, medicamentos: List[str]) -> Receta:
+        if dni_paciente not in self.pacientes:
+            raise PacienteNoEncontradoException(f"Paciente con DNI {dni_paciente} no encontrado")
+        if matricula_medico not in self.medicos:
+            raise MedicoNoEncontradoException(f"Médico con matrícula {matricula_medico} no encontrado")
+
+        if not medicamentos or len(medicamentos) == 0:
+            raise RecetaInvalidaException("La lista de medicamentos no puede estar vacía")
+
+        paciente = self.pacientes[dni_paciente]
+        medico = self.medicos[matricula_medico]
+
+        receta = Receta(paciente, medico, medicamentos)
+        self._recetas.append(receta)
         return receta
 
-    def obtener_historia_clinica(self, dni: str) -> HistoriaClinica:
-        if dni not in self.historias:
-            raise PacienteNoExisteError("Paciente no encontrado")
-        return self.historias[dni]
+    def historia_clinica_turnos(self, dni_paciente: str) -> List[Turno]:
+        return [t for t in self._turnos if t.paciente.dni == dni_paciente]
 
-    def obtener_turnos(self) -> List[Turno]:
-        return self.turnos
+    def historia_clinica_recetas(self, dni_paciente: str) -> List[Receta]:
+        return [r for r in self._recetas if r.paciente.dni == dni_paciente]
 
-    def obtener_especialidad_disponible(self, medico: Medico, dia: str) -> Especialidad:
-        especialidad = medico.obtener_especialidad_para_dia(dia)
-        if especialidad is None:
-            raise EspecialidadInvalidaError("El médico no tiene especialidad para ese día")
-        return especialidad
 
-# =======================
-# Interfaz CLI
-# =======================
+# Interfaz por consola (opcional si se requiere)
 class CLI:
-    def __init__(self):
-        self.clinica = Clinica()
-
-    def mostrar_menu(self):
-        print("\n" + "=" * 50)
-        print("\U0001F3E5 SISTEMA DE GESTIÓN DE CLÍNICA MÉDICA")
-        print("=" * 50)
-        print("1. Agregar paciente")
-        print("2. Agregar médico")
-        print("3. Agendar turno")
-        print("4. Emitir receta")
-        print("5. Ver historia clínica")
-        print("6. Ver todos los turnos")
-        print("7. Ver todos los pacientes")
-        print("8. Ver todos los médicos")
-        print("9. Ver médico por matrícula")
-        print("10. Agregar especialidad")
-        print("11. Obtener especialidad disponible")
-        print("12. Salir")
-        print("=" * 50)
-
-    def agregar_paciente(self):
-        print("\n--- AGREGAR PACIENTE ---")
-        dni = input("DNI: ")
-        nombre = input("Nombre completo: ")
-        fecha_nacimiento = input("Fecha de nacimiento (dd/mm/aaaa): ")
-        paciente = Paciente(dni, nombre, fecha_nacimiento)
-        try:
-            self.clinica.registrar_paciente(paciente)
-            print(f"Paciente {nombre} agregado exitosamente.")
-        except PacienteYaExisteError as e:
-            print(f"Error: {e}")
-
-    def agregar_medico(self):
-        print("\n--- AGREGAR MÉDICO ---")
-        matricula = input("Matrícula: ")
-        nombre = input("Nombre completo: ")
-        especialidad_nombre = input("Especialidad principal: ")
-        especialidad = Especialidad(especialidad_nombre, [])
-        medico = Medico(matricula, nombre, [especialidad])
-        try:
-            self.clinica.registrar_medico(medico)
-            print(f"Dr. {nombre} agregado exitosamente.")
-        except MedicoYaExisteError as e:
-            print(f"Error: {e}")
-
-    def agendar_turno(self):
-        print("\n--- AGENDAR TURNO ---")
-        try:
-            dni = input("DNI del paciente: ")
-            matricula = input("Matrícula del médico: ")
-            fecha = input("Fecha (YYYY-MM-DD): ")
-            hora = input("Hora (HH:MM): ")
-            turno = self.clinica.agendar_turno(dni, matricula, fecha, hora)
-            print("Turno agendado exitosamente:")
-            print(turno)
-        except (PacienteNoExisteError, MedicoNoExisteError,
-                TurnoDuplicadoError, EspecialidadInvalidaError, ValueError) as e:
-            print(f"Error: {e}")
-
-    def emitir_receta(self):
-        print("\n--- EMITIR RECETA ---")
-        try:
-            dni = input("DNI del paciente: ")
-            matricula = input("Matrícula del médico: ")
-            medicamento = input("Medicamento recetado: ")
-            fecha = input("Fecha de la receta (YYYY-MM-DD): ")
-            receta = self.clinica.recetar_medicamento(dni, matricula, medicamento, fecha)
-            print("Receta emitida exitosamente:")
-            print(receta)
-        except (PacienteNoExisteError, MedicoNoExisteError, RecetaInvalidaError) as e:
-            print(f"Error: {e}")
-
-    def ver_historia_clinica(self):
-        print("\n--- VER HISTORIA CLÍNICA ---")
-        dni = input("DNI del paciente: ")
-        try:
-            historia = self.clinica.obtener_historia_clinica(dni)
-            print(historia)
-        except PacienteNoExisteError as e:
-            print(f"Error: {e}")
-
-    def ver_todos_los_turnos(self):
-        print("\n--- TODOS LOS TURNOS ---")
-        turnos = self.clinica.obtener_turnos()
-        if turnos:
-            for i, turno in enumerate(turnos, 1):
-                print(f"{i}. {turno}")
-        else:
-            print("No hay turnos registrados.")
-
-    def ver_todos_los_pacientes(self):
-        print("\n--- TODOS LOS PACIENTES ---")
-        if self.clinica.pacientes:
-            for i, paciente in enumerate(self.clinica.pacientes.values(), 1):
-                print(f"{i}. {paciente}")
-        else:
-            print("No hay pacientes registrados.")
-
-    def ver_todos_los_medicos(self):
-        print("\n--- TODOS LOS MÉDICOS ---")
-        if self.clinica.medicos:
-            for i, medico in enumerate(self.clinica.medicos.values(), 1):
-                print(f"{i}. {medico}")
-        else:
-            print("No hay médicos registrados.")
-
-    def buscar_medico_por_matricula(self, matricula: str):
-        try:
-            medico = self.clinica.medicos[matricula]
-            print(f"\nMédico encontrado: {medico}")
-        except KeyError:
-            print("Error: Médico no encontrado.")
-
-    def agregar_especialidad(self):
-        print("\n--- AGREGAR ESPECIALIDAD ---")
-        matricula = input("Matrícula del médico: ")
-        tipo = input("Tipo de especialidad: ")
-        print("Ingrese los días disponibles (uno por línea, Enter vacío para terminar):")
-        dias = []
-        while True:
-            dia = input("Día: ").strip()
-            if not dia:
-                break
-            dias.append(dia)
-
-        try:
-            medico = self.clinica.medicos[matricula]
-            especialidad = Especialidad(tipo, dias)
-            medico.agregar_especialidad(especialidad)
-            print(f"Especialidad '{tipo}' agregada exitosamente.")
-        except KeyError:
-            print("Error: Médico no encontrado.")
-
-    def obtener_especialidad_disponible(self):
-        print("\n--- OBTENER ESPECIALIDAD DISPONIBLE ---")
-        matricula = input("Matrícula del médico: ")
-        dia_semana = input("Día de la semana: ")
-        try:
-            medico = self.clinica.medicos[matricula]
-            especialidad = self.clinica.obtener_especialidad_disponible(medico, dia_semana)
-            print(f"Especialidad disponible: {especialidad}")
-        except (KeyError, EspecialidadInvalidaError) as e:
-            print(f"Error: {e}")
+    def __init__(self, clinica):
+        self._clinica = clinica
 
     def ejecutar(self):
         while True:
-            self.mostrar_menu()
-            opcion = input("Seleccione una opción (1-12): ").strip()
+            print("\n--- Sistema de Gestión Clínica ---")
+            print("1. Agregar paciente")
+            print("2. Agregar médico")
+            print("3. Agregar especialidad a médico")
+            print("4. Agendar turno")
+            print("5. Emitir receta")
+            print("6. Ver historia clínica")
+            print("0. Salir")
+
+            opcion = input("Seleccione una opción: ")
+
             if opcion == "1":
-                self.agregar_paciente()
+                nombre = input("Nombre del paciente: ")
+                dni = input("DNI del paciente: ")
+                fecha_str = input("Fecha de nacimiento (YYYY-MM-DD): ")
+                fecha = datetime.strptime(fecha_str, "%Y-%m-%d")
+                paciente = Paciente(nombre, dni, fecha)
+                try:
+                    self._clinica.agregar_paciente(paciente)
+                    print("Paciente agregado con éxito.")
+                except ValueError as e:
+                    print("Error:", e)
+
             elif opcion == "2":
-                self.agregar_medico()
+                nombre = input("Nombre del médico: ")
+                matricula = input("Matrícula: ")
+                medico = Medico(nombre, matricula)
+                try:
+                    self._clinica.agregar_medico(medico)
+                    print("Médico agregado con éxito.")
+                except ValueError as e:
+                    print("Error:", e)
+
             elif opcion == "3":
-                self.agendar_turno()
+                matricula = input("Matrícula del médico: ")
+                nombre_esp = input("Nombre de la especialidad: ")
+                dias = input("Días disponibles (separados por coma, en inglés): ").split(",")
+                especialidad = Especialidad(nombre_esp, [d.strip() for d in dias])
+                try:
+                    self._clinica.agregar_especialidad_a_medico(matricula, especialidad)
+                    print("Especialidad agregada al médico.")
+                except Exception as e:
+                    print("Error:", e)
+
             elif opcion == "4":
-                self.emitir_receta()
+                dni = input("DNI del paciente: ")
+                matricula = input("Matrícula del médico: ")
+                especialidad = input("Especialidad: ")
+                fecha_str = input("Fecha del turno (YYYY-MM-DD HH:MM): ")
+                fecha = datetime.strptime(fecha_str, "%Y-%m-%d %H:%M")
+                try:
+                    self._clinica.agendar_turno(dni, matricula, especialidad, fecha)
+                    print("Turno agendado con éxito.")
+                except Exception as e:
+                    print("Error:", e)
+
             elif opcion == "5":
-                self.ver_historia_clinica()
+                dni = input("DNI del paciente: ")
+                matricula = input("Matrícula del médico: ")
+                medicamentos = input("Medicamentos (separados por coma): ").split(",")
+                medicamentos = [m.strip() for m in medicamentos]
+                try:
+                    self._clinica.emitir_receta(dni, matricula, medicamentos)
+                    print("Receta emitida con éxito.")
+                except Exception as e:
+                    print("Error:", e)
+
             elif opcion == "6":
-                self.ver_todos_los_turnos()
-            elif opcion == "7":
-                self.ver_todos_los_pacientes()
-            elif opcion == "8":
-                self.ver_todos_los_medicos()
-            elif opcion == "9":
-                matricula = input("Ingrese matrícula del médico: ")
-                self.buscar_medico_por_matricula(matricula)
-            elif opcion == "10":
-                self.agregar_especialidad()
-            elif opcion == "11":
-                self.obtener_especialidad_disponible()
-            elif opcion == "12":
-                print("¡Gracias por usar el sistema de la clínica!")
+                dni = input("DNI del paciente: ")
+                try:
+                    print(self._clinica.ver_historia_clinica(dni))
+                except Exception as e:
+                    print("Error:", e)
+
+            elif opcion == "0":
+                print("Saliendo del sistema.")
                 break
+
             else:
-                print("Opción inválida. Ingrese un número del 1 al 12.")
+                print("Opción inválida.")
+
 
 # =======================
 # Función principal

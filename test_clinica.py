@@ -1,73 +1,235 @@
 import unittest
+from datetime import datetime, timedelta
+
 from clinica import (
-    Paciente, Medico, Especialidad, Turno, Receta, HistoriaClinica, Clinica,
-    PacienteYaExisteError, PacienteNoExisteError,
-    MedicoYaExisteError, MedicoNoExisteError,
-    TurnoDuplicadoError, EspecialidadInvalidaError,
-    RecetaInvalidaError
+    Clinica, Paciente, Medico, Especialidad, Turno, Receta,
+    PacienteYaRegistradoException,
+    MedicoYaRegistradoException,
+    PacienteNoEncontradoException,
+    MedicoNoEncontradoException,
+    EspecialidadDuplicadaException,
+    EspecialidadInvalidaException,
+    TurnoOcupadoException,
+    TurnoInvalidoException,
+    RecetaInvalidaException
 )
 
 class TestClinica(unittest.TestCase):
+
     def setUp(self):
         self.clinica = Clinica()
-        self.paciente = Paciente("12345678", "Juan Pérez", "01/01/1980")
-        self.especialidad = Especialidad("Clínica Médica", ["Lunes", "Miércoles"])
-        self.medico = Medico("M001", "Dr. House", [self.especialidad])
-        self.clinica.registrar_paciente(self.paciente)
-        self.clinica.registrar_medico(self.medico)
 
-    def test_registrar_paciente_duplicado(self):
-        with self.assertRaises(PacienteYaExisteError):
-            self.clinica.registrar_paciente(Paciente("12345678", "Otro Nombre", "02/02/1990"))
+    # --- Pacientes y Médicos ---
 
-    def test_registrar_medico_duplicado(self):
-        with self.assertRaises(MedicoYaExisteError):
-            self.clinica.registrar_medico(Medico("M001", "Otro Médico", [self.especialidad]))
-
-    def test_agendar_turno_ok(self):
-        turno = self.clinica.agendar_turno("12345678", "M001", "2025-06-20", "10:00")
-        self.assertIsInstance(turno, Turno)
-        self.assertEqual(len(self.clinica.turnos), 1)
-
-    def test_agendar_turno_con_paciente_inexistente(self):
-        with self.assertRaises(PacienteNoExisteError):
-            self.clinica.agendar_turno("99999999", "M001", "2025-06-20", "10:00")
-
-    def test_agendar_turno_con_medico_inexistente(self):
-        with self.assertRaises(MedicoNoExisteError):
-            self.clinica.agendar_turno("12345678", "X001", "2025-06-20", "10:00")
-
-    def test_agendar_turno_duplicado(self):
-        self.clinica.agendar_turno("12345678", "M001", "2025-06-20", "10:00")
-        with self.assertRaises(TurnoDuplicadoError):
-            self.clinica.agendar_turno("12345678", "M001", "2025-06-20", "10:00")
-
-    def test_recetar_medicamento_ok(self):
-        receta = self.clinica.recetar_medicamento("12345678", "M001", "Paracetamol", "2025-06-20")
-        self.assertIsInstance(receta, Receta)
-
-    def test_recetar_con_datos_invalidos(self):
-        with self.assertRaises(PacienteNoExisteError):
-            self.clinica.recetar_medicamento("00000000", "M001", "Ibuprofeno", "2025-06-20")
-
-    def test_obtener_historia_clinica(self):
-        self.clinica.recetar_medicamento("12345678", "M001", "Paracetamol", "2025-06-20")
-        historia = self.clinica.obtener_historia_clinica("12345678")
-        self.assertIsInstance(historia, HistoriaClinica)
-        self.assertEqual(len(historia.recetas), 1)
-
-    def test_obtener_especialidad_disponible_ok(self):
-        especialidad = self.clinica.obtener_especialidad_disponible(self.medico, "Lunes")
-        self.assertEqual(especialidad.tipo, "Clínica Médica")
-
-    def test_obtener_especialidad_disponible_fail(self):
-        with self.assertRaises(EspecialidadInvalidaError):
-            self.clinica.obtener_especialidad_disponible(self.medico, "Domingo")
-
-    def test_listados(self):
-        self.assertEqual(len(self.clinica.obtener_turnos()), 0)
+    def test_registro_paciente_exitoso(self):
+        paciente = Paciente("Juan", "Perez", "12345678", 30)
+        self.clinica.agregar_paciente(paciente)
         self.assertIn("12345678", self.clinica.pacientes)
-        self.assertIn("M001", self.clinica.medicos)
+
+    def test_registro_medico_exitoso(self):
+        medico = Medico("Carlos", "Lopez", "M123", [])
+        self.clinica.agregar_medico(medico)
+        self.assertIn("M123", self.clinica.medicos)
+
+    def test_registro_paciente_duplicado(self):
+        paciente1 = Paciente("Juan", "Perez", "12345678", 30)
+        paciente2 = Paciente("Ana", "Gomez", "12345678", 25)  # Mismo DNI
+        self.clinica.agregar_paciente(paciente1)
+        with self.assertRaises(PacienteYaRegistradoException):
+            self.clinica.agregar_paciente(paciente2)
+
+    def test_registro_medico_duplicado(self):
+        medico1 = Medico("Carlos", "Lopez", "M123", [])
+        medico2 = Medico("Luis", "Diaz", "M123", [])  # Mismo número de matrícula
+        self.clinica.agregar_medico(medico1)
+        with self.assertRaises(MedicoYaRegistradoException):
+            self.clinica.agregar_medico(medico2)
+
+    def test_registro_paciente_datos_invalidos(self):
+        with self.assertRaises(ValueError):
+            paciente = Paciente("", "Perez", "12345678", 30)
+            self.clinica.agregar_paciente(paciente)
+        with self.assertRaises(ValueError):
+            paciente = Paciente("Juan", "", "12345678", 30)
+            self.clinica.agregar_paciente(paciente)
+        with self.assertRaises(ValueError):
+            paciente = Paciente("Juan", "Perez", "", 30)
+            self.clinica.agregar_paciente(paciente)
+
+    def test_registro_medico_datos_invalidos(self):
+        with self.assertRaises(ValueError):
+            medico = Medico("", "Lopez", "M123", [])
+            self.clinica.agregar_medico(medico)
+        with self.assertRaises(ValueError):
+            medico = Medico("Carlos", "", "M123", [])
+            self.clinica.agregar_medico(medico)
+        with self.assertRaises(ValueError):
+            medico = Medico("Carlos", "Lopez", "", [])
+            self.clinica.agregar_medico(medico)
+
+    # --- Especialidades ---
+
+    def test_agregar_especialidad_a_medico_exitoso(self):
+        medico = Medico("Carlos", "Lopez", "M123", [])
+        especialidad = Especialidad("Cardiología", [0, 2, 4])
+        self.clinica.agregar_medico(medico)
+        self.clinica.agregar_especialidad_a_medico("M123", especialidad)
+        self.assertIn(especialidad, self.clinica.medicos["M123"].especialidades)
+
+    def test_agregar_especialidad_duplicada(self):
+        medico = Medico("Carlos", "Lopez", "M123", [])
+        especialidad = Especialidad("Cardiología", [0, 2, 4])
+        self.clinica.agregar_medico(medico)
+        self.clinica.agregar_especialidad_a_medico("M123", especialidad)
+        with self.assertRaises(EspecialidadDuplicadaException):
+            self.clinica.agregar_especialidad_a_medico("M123", especialidad)
+
+    def test_especialidad_dias_invalidos(self):
+        with self.assertRaises(EspecialidadInvalidaException):
+            Especialidad("Neurología", [-1, 2])
+        with self.assertRaises(EspecialidadInvalidaException):
+            Especialidad("Dermatología", [0, 7])
+        with self.assertRaises(EspecialidadInvalidaException):
+            Especialidad("Pediatría", [10])
+
+    def test_agregar_especialidad_medico_inexistente(self):
+        especialidad = Especialidad("Cardiología", [0, 2, 4])
+        with self.assertRaises(MedicoNoEncontradoException):
+            self.clinica.agregar_especialidad_a_medico("M999", especialidad)
+
+    # --- Turnos ---
+
+    def test_agendar_turno_exitoso(self):
+        paciente = Paciente("Ana", "Perez", "87654321", 25)
+        medico = Medico("Carlos", "Lopez", "M123", [])
+        especialidad = Especialidad("Cardiología", [0, 2, 4])
+        self.clinica.agregar_paciente(paciente)
+        self.clinica.agregar_medico(medico)
+        self.clinica.agregar_especialidad_a_medico("M123", especialidad)
+        fecha = datetime.now() + timedelta(days=1)
+        # Ajusto fecha al próximo día que el médico atiende
+        while fecha.weekday() not in especialidad.dias_atencion:
+            fecha += timedelta(days=1)
+
+        turno = self.clinica.agendar_turno("87654321", "M123", fecha, "Cardiología")
+        self.assertIsInstance(turno, Turno)
+        self.assertIn(turno, self.clinica.historia_clinica_turnos("87654321"))
+
+    def test_agendar_turno_paciente_no_encontrado(self):
+        medico = Medico("Carlos", "Lopez", "M123", [])
+        especialidad = Especialidad("Cardiología", [0, 2, 4])
+        self.clinica.agregar_medico(medico)
+        self.clinica.agregar_especialidad_a_medico("M123", especialidad)
+        fecha = datetime.now() + timedelta(days=1)
+        while fecha.weekday() not in especialidad.dias_atencion:
+            fecha += timedelta(days=1)
+        with self.assertRaises(PacienteNoEncontradoException):
+            self.clinica.agendar_turno("00000000", "M123", fecha, "Cardiología")
+
+    def test_agendar_turno_medico_no_encontrado(self):
+        paciente = Paciente("Ana", "Perez", "87654321", 25)
+        self.clinica.agregar_paciente(paciente)
+        fecha = datetime.now() + timedelta(days=1)
+        with self.assertRaises(MedicoNoEncontradoException):
+            self.clinica.agendar_turno("87654321", "M999", fecha, "Cardiología")
+
+    def test_agendar_turno_turno_ocupado(self):
+        paciente1 = Paciente("Ana", "Perez", "87654321", 25)
+        paciente2 = Paciente("Juan", "Lopez", "12345678", 30)
+        medico = Medico("Carlos", "Lopez", "M123", [])
+        especialidad = Especialidad("Cardiología", [0, 2, 4])
+        self.clinica.agregar_paciente(paciente1)
+        self.clinica.agregar_paciente(paciente2)
+        self.clinica.agregar_medico(medico)
+        self.clinica.agregar_especialidad_a_medico("M123", especialidad)
+        fecha = datetime.now() + timedelta(days=1)
+        while fecha.weekday() not in especialidad.dias_atencion:
+            fecha += timedelta(days=1)
+
+        self.clinica.agendar_turno("87654321", "M123", fecha, "Cardiología")
+        with self.assertRaises(TurnoOcupadoException):
+            self.clinica.agendar_turno("12345678", "M123", fecha, "Cardiología")
+
+    def test_turno_especialidad_no_atendida(self):
+        paciente = Paciente("Ana", "Perez", "87654321", 25)
+        medico = Medico("Carlos", "Lopez", "M123", [])
+        especialidad_medico = Especialidad("Cardiología", [0, 2, 4])
+        self.clinica.agregar_paciente(paciente)
+        self.clinica.agregar_medico(medico)
+        self.clinica.agregar_especialidad_a_medico("M123", especialidad_medico)
+        fecha_turno = datetime.now() + timedelta(days=1)
+        while fecha_turno.weekday() not in especialidad_medico.dias_atencion:
+            fecha_turno += timedelta(days=1)
+        especialidad_pedido = "Neurología"  # No atendida
+        with self.assertRaises(TurnoInvalidoException):
+            self.clinica.agendar_turno("87654321", "M123", fecha_turno, especialidad_pedido)
+
+    def test_turno_medico_no_trabaja_ese_dia(self):
+        paciente = Paciente("Ana", "Perez", "87654321", 25)
+        medico = Medico("Carlos", "Lopez", "M123", [])
+        especialidad = Especialidad("Cardiología", [0, 2, 4])
+        self.clinica.agregar_paciente(paciente)
+        self.clinica.agregar_medico(medico)
+        self.clinica.agregar_especialidad_a_medico("M123", especialidad)
+        fecha_turno = datetime.now()
+        # Avanzo fecha hasta un día que no está en dias_atencion
+        while fecha_turno.weekday() in especialidad.dias_atencion:
+            fecha_turno += timedelta(days=1)
+        with self.assertRaises(TurnoInvalidoException):
+            self.clinica.agendar_turno("87654321", "M123", fecha_turno, "Cardiología")
+
+    # --- Recetas ---
+
+    def test_emitir_receta_exitoso(self):
+        paciente = Paciente("Ana", "Perez", "87654321", 25)
+        medico = Medico("Carlos", "Lopez", "M123", [])
+        self.clinica.agregar_paciente(paciente)
+        self.clinica.agregar_medico(medico)
+        medicamentos = ["Paracetamol", "Ibuprofeno"]
+        receta = self.clinica.emitir_receta("87654321", "M123", medicamentos)
+        self.assertIsInstance(receta, Receta)
+        self.assertIn(receta, self.clinica.historia_clinica_recetas("87654321"))
+
+    def test_emitir_receta_sin_medicamentos(self):
+        paciente = Paciente("Ana", "Perez", "87654321", 25)
+        medico = Medico("Carlos", "Lopez", "M123", [])
+        self.clinica.agregar_paciente(paciente)
+        self.clinica.agregar_medico(medico)
+        with self.assertRaises(RecetaInvalidaException):
+            self.clinica.emitir_receta("87654321", "M123", [])
+
+    def test_emitir_receta_paciente_inexistente(self):
+        medico = Medico("Carlos", "Lopez", "M123", [])
+        self.clinica.agregar_medico(medico)
+        with self.assertRaises(PacienteNoEncontradoException):
+            self.clinica.emitir_receta("00000000", "M123", ["Paracetamol"])
+
+    def test_emitir_receta_medico_inexistente(self):
+        paciente = Paciente("Ana", "Perez", "87654321", 25)
+        self.clinica.agregar_paciente(paciente)
+        with self.assertRaises(MedicoNoEncontradoException):
+            self.clinica.emitir_receta("87654321", "M999", ["Paracetamol"])
+
+    # --- Historia Clínica ---
+
+    def test_historia_clinica_guarda_turno_y_receta(self):
+        paciente = Paciente("Ana", "Perez", "87654321", 25)
+        medico = Medico("Carlos", "Lopez", "M123", [])
+        especialidad = Especialidad("Cardiología", [0, 2, 4])
+        self.clinica.agregar_paciente(paciente)
+        self.clinica.agregar_medico(medico)
+        self.clinica.agregar_especialidad_a_medico("M123", especialidad)
+        fecha = datetime.now() + timedelta(days=1)
+        while fecha.weekday() not in especialidad.dias_atencion:
+            fecha += timedelta(days=1)
+        turno = self.clinica.agendar_turno("87654321", "M123", fecha, "Cardiología")
+        medicamentos = ["Paracetamol"]
+        receta = self.clinica.emitir_receta("87654321", "M123", medicamentos)
+        turnos_hist = self.clinica.historia_clinica_turnos("87654321")
+        recetas_hist = self.clinica.historia_clinica_recetas("87654321")
+        self.assertIn(turno, turnos_hist)
+        self.assertIn(receta, recetas_hist)
+
 
 if __name__ == '__main__':
     unittest.main()
